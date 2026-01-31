@@ -13,7 +13,7 @@
         .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
         
         @media print {
-            .container, button, #reader, .drop-zone { display: none !important; }
+            .container, button, #reader, .drop-zone, #stop-cam { display: none !important; }
             #ticket-receipt { display: block !important; border: none !important; width: 100%; }
         }
 
@@ -26,6 +26,9 @@
         #ticket-receipt { display: none; background: #fffbe6; border: 2px solid #fadb14; padding: 20px; border-radius: 10px; margin-top: 20px; }
         .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
         .total-box { background: #2e7d32; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-top: 10px; }
+        
+        /* Camera Styling */
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 10px; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
@@ -34,14 +37,15 @@
     <h2>📟 Conductor Terminal</h2>
     
     <div id="reader"></div>
+    
     <div class="drop-zone" onclick="document.getElementById('qr-input-file').click()" style="border: 2px dashed #2e7d32; padding: 15px; text-align: center; cursor: pointer; border-radius: 10px; margin-bottom: 10px;">
-        Tap to Upload QR Image
+        Tap to Upload QR Image (Instead of Cam)
     </div>
     <input type="file" id="qr-input-file" accept="image/*" style="display:none">
 
     <div class="input-group">
         <label>Card ID</label>
-        <input type="text" id="cardId" readonly placeholder="Scan QR to Fill">
+        <input type="text" id="cardId" readonly placeholder="Camera Result Here">
     </div>
 
     <div style="display:flex; gap:10px">
@@ -83,6 +87,7 @@
 </div>
 
 <script>
+    // Firebase Config
     const firebaseConfig = {
         apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
         authDomain: "smartbuscard.firebaseapp.com",
@@ -111,18 +116,33 @@
         document.getElementById('displayTotal').innerText = unitFare * qty;
     }
 
-    // 2. QR Scanner
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
-        document.getElementById('cardId').value = text;
-    });
+    // 2. Full Camera QR Scanner Integration
+    function onScanSuccess(decodedText) {
+        // Auto-fill the Card ID when QR is detected
+        document.getElementById('cardId').value = decodedText;
+        // Visual feedback
+        document.getElementById('cardId').style.background = "#e8f5e9";
+    }
 
-    // 3. File Upload Scan
+    function onScanFailure(error) {
+        // We ignore failures to avoid console spam during live scanning
+    }
+
+    // Initializing the Scanner
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", 
+        { fps: 15, qrbox: {width: 250, height: 250} }, 
+        /* verbose= */ false
+    );
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+    // 3. File Upload Scan (Fallback)
     document.getElementById('qr-input-file').addEventListener('change', e => {
         if (e.target.files.length == 0) return;
+        const html5QrCode = new Html5Qrcode("reader");
         html5QrCode.scanFile(e.target.files[0], true)
             .then(text => { document.getElementById('cardId').value = text; })
-            .catch(err => alert("QR Not Found"));
+            .catch(err => alert("QR Not Found in image"));
     });
 
     // 4. Final Transaction
@@ -139,7 +159,6 @@
                 if (data.balance >= totalFare) {
                     const newBal = data.balance - totalFare;
                     db.ref('cards/' + cid).update({ balance: newBal }).then(() => {
-                        // Display Receipt
                         document.getElementById('ticket-receipt').style.display = "block";
                         document.getElementById('tName').innerText = data.name;
                         document.getElementById('tRoute').innerText = document.getElementById('fromLoc').value + " to " + document.getElementById('toLoc').value;
@@ -149,7 +168,7 @@
                         document.getElementById('tTime').innerText = new Date().toLocaleString();
                         document.getElementById('ticket-receipt').scrollIntoView();
                     });
-                } else { alert("Insufficient Balance!"); }
+                } else { alert("Insufficient Balance! Available: ₹" + data.balance); }
             } else { alert("Invalid Card!"); }
         });
     }
