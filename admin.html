@@ -1,83 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Create Smart Card</title>
+    <title>Smart Bus - Admin Panel</title>
+    
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f4f7f6; padding: 20px; }
-        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        input { width: 80%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
-        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .admin-box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; }
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 8px; background: #e8f0fe; color: #1967d2; display: none; }
         #qrcode-container { margin-top: 20px; display: flex; justify-content: center; }
-        #result { margin-top: 15px; font-size: 14px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
-<div class="card">
+<div class="admin-box">
     <h2>🚌 Create Smart Card</h2>
-    <input type="text" id="name" placeholder="Enter Passenger Name">
-    <button onclick="createCard()">Create Card & Save to Cloud</button>
-
+    <input type="text" id="passengerName" placeholder="Enter Passenger Name">
+    <button onclick="createCard()">Generate Card & QR</button>
     <div id="result"></div>
     <div id="qrcode-container"></div>
 </div>
 
 <script>
-    // 1. YOUR FIREBASE CONFIG (REPLACE THIS WITH YOUR KEYS)
+    // These values are copied directly from your image_e654a0.jpg
     const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT.firebaseapp.com",
-        databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT.appspot.com",
-        messagingSenderId: "YOUR_ID",
-        appId: "YOUR_APP_ID"
+        apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
+        authDomain: "smartbuscard.firebaseapp.com",
+        databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
+        projectId: "smartbuscard",
+        storageBucket: "smartbuscard.firebasestorage.app",
+        messagingSenderId: "740841885323",
+        appId: "1:740841885323:web:87c2ec39e01ffb533f8e8e"
     };
 
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
     function createCard() {
-        const name = document.getElementById('name').value;
-        if (!name) { alert("Please enter a name"); return; }
+        const name = document.getElementById('passengerName').value;
+        if (!name) { alert("Enter a name!"); return; }
 
-        // Generate Random Card ID
         const cardId = "BUS" + Math.floor(100000 + Math.random() * 900000);
-        const initialBalance = 100;
 
-        // Save to Firebase
         db.ref('cards/' + cardId).set({
             name: name,
-            balance: initialBalance
+            balance: 100
         }).then(() => {
-            // Show Success Message
-            document.getElementById('result').innerHTML = `
-                <div style="color:green; font-weight:bold;">✅ Card Saved to Database!</div>
-                <strong>Name:</strong> ${name}<br>
-                <strong>Card No:</strong> ${cardId}<br>
-                <strong>Balance:</strong> ₹${initialBalance}
-            `;
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = "block";
+            resultDiv.innerHTML = `✅ Card Saved!<br>ID: <b>${cardId}</b><br>Name: ${name}`;
 
-            // Clear old QR code and generate new one
+            // Generate QR
             document.getElementById("qrcode-container").innerHTML = "";
             new QRCode(document.getElementById("qrcode-container"), {
                 text: cardId,
                 width: 150,
                 height: 150
             });
-
-            document.getElementById('name').value = ""; // Reset input
-        }).catch((error) => {
-            document.getElementById('result').innerHTML = "Error: " + error.message;
-        });
+        }).catch(err => alert("Error: " + err.message));
     }
 </script>
-
 </body>
 </html>
