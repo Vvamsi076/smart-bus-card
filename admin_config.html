@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - Bus Settings</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
+        .box { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 350px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        h2 { color: #1a73e8; margin-top: 0; }
+        label { font-size: 13px; font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>⚙️ Bus Admin</h2>
+    
+    <label>Bus Number</label>
+    <input type="text" id="busNum" placeholder="e.g. TS-09-5566">
+    
+    <label>Travel Date</label>
+    <input type="date" id="busDate">
+    
+    <hr>
+    <label>From (Place)</label>
+    <input type="text" id="from" placeholder="e.g. India">
+    
+    <label>To (Place)</label>
+    <input type="text" id="to" placeholder="e.g. Rajastan">
+    
+    <label>Price (₹)</label>
+    <input type="number" id="cost" placeholder="15">
+    
+    <button onclick="saveSettings()">UPDATE SYSTEM</button>
+    <p id="msg" style="color: green; text-align: center; margin-top: 10px;"></p>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
+        authDomain: "smartbuscard.firebaseapp.com",
+        databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
+        projectId: "smartbuscard",
+        storageBucket: "smartbuscard.firebasestorage.app",
+        messagingSenderId: "740841885323",
+        appId: "1:740841885323:web:87c2ec39e01ffb533f8e8e"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function saveSettings() {
+        const bus = document.getElementById('busNum').value;
+        const date = document.getElementById('busDate').value;
+        const f = document.getElementById('from').value.toLowerCase().trim();
+        const t = document.getElementById('to').value.toLowerCase().trim();
+        const c = document.getElementById('cost').value;
+
+        if(!bus || !date || !f || !t || !c) { alert("Please fill all fields!"); return; }
+
+        // Save Bus info and the specific Route price
+        db.ref('bus_settings/info').set({ busNumber: bus, travelDate: date });
+        
+        const routeKey = f + "_" + t;
+        db.ref('bus_settings/routes/' + routeKey).set({ price: parseFloat(c) })
+        .then(() => {
+            document.getElementById('msg').innerText = "✅ System Updated!";
+        });
+    }
+</script>
+</body>
+</html>
