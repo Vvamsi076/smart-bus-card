@@ -11,12 +11,12 @@
         input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         .btn { width: 100%; padding: 15px; background: #2e7d32; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
         
-        /* Shift Summary Styling */
         #shift-summary { margin-top: 20px; background: #263238; color: white; padding: 15px; border-radius: 10px; width: 100%; max-width: 400px; }
         .summary-item { display: flex; justify-content: space-between; margin: 5px 0; border-bottom: 1px solid #455a64; padding-bottom: 5px; }
         
         #ticket-receipt { display: none; background: #fffbe6; border: 2px dashed #000; padding: 15px; margin-top: 20px; width: 100%; }
         .warning { color: #d32f2f; font-weight: bold; background: #ffcdd2; padding: 5px; border-radius: 4px; text-align: center; margin: 10px 0; display: none; }
+        .reset-btn { background: #cfd8dc; color: #37474f; border: none; padding: 5px 10px; border-radius: 4px; font-size: 10px; cursor: pointer; float: right; }
         @media print { .container, #reader, #shift-summary, .btn { display: none !important; } #ticket-receipt { display: block !important; } }
     </style>
 </head>
@@ -40,9 +40,10 @@
 </div>
 
 <div id="shift-summary">
+    <button class="reset-btn" onclick="resetShift()">ERASE DATA</button>
     <h3 style="margin-top:0; color:#81c784;">📊 Shift Summary</h3>
-    <div class="summary-item"><span>Tickets Issued:</span> <span id="sQty">0</span></div>
-    <div class="summary-item"><span>Total Cash:</span> <span>₹<span id="sCash">0</span></span></div>
+    <div class="summary-item"><span>Tickets Issued Today:</span> <span id="sQty">0</span></div>
+    <div class="summary-item"><span>Total Cash Collected:</span> <span>₹<span id="sCash">0</span></span></div>
 </div>
 
 <div id="ticket-receipt">
@@ -59,7 +60,6 @@
 </div>
 
 <script>
-    // Firebase Config
     const firebaseConfig = {
         apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
         authDomain: "smartbuscard.firebaseapp.com",
@@ -72,10 +72,16 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let totalCollection = 0;
-    let totalTickets = 0;
     let lastScannedId = "";
     let lastScanTime = 0;
+
+    // Load existing Shift Data from Firebase on startup
+    db.ref('bus_settings/shift_totals').on('value', snap => {
+        if(snap.exists()){
+            document.getElementById('sQty').innerText = snap.val().totalTickets || 0;
+            document.getElementById('sCash').innerText = snap.val().totalCash || 0;
+        }
+    });
 
     function checkFare() {
         const f = document.getElementById('from').value.toLowerCase().trim();
@@ -98,7 +104,6 @@
         checkLowBalance(text);
     });
 
-    // Feature: Low Balance Warning
     function checkLowBalance(cid) {
         db.ref('cards/' + cid).once('value', snap => {
             if(snap.exists() && snap.val().balance < 30) {
@@ -112,49 +117,64 @@
     function issueTicket() {
         const cid = document.getElementById('cardId').value;
         const total = parseFloat(document.getElementById('total').innerText);
+        const qtyToIssue = parseInt(document.getElementById('qty').value);
         const currentTime = Date.now();
 
-        // Feature: Anti-Double Scan (Fraud Prevention)
         if(cid === lastScannedId && (currentTime - lastScanTime) < 60000) {
-            alert("This card was scanned less than a minute ago!");
+            alert("Fraud Prevention: Card scanned too recently!");
             return;
         }
 
-        if(!cid || total <= 0) { alert("Check Card/Route!"); return; }
+        if(!cid || total <= 0) { alert("Invalid Details!"); return; }
 
         db.ref('cards/' + cid).once('value', snapshot => {
             if(snapshot.exists()){
                 const user = snapshot.val();
                 if(user.balance >= total){
                     const newBal = user.balance - total;
-                    db.ref('cards/' + cid).update({ balance: newBal });
                     
-                    // Feature: Update Shift Summary
-                    totalCollection += total;
-                    totalTickets += parseInt(document.getElementById('qty').value);
-                    document.getElementById('sQty').innerText = totalTickets;
-                    document.getElementById('sCash').innerText = totalCollection;
+                    // Update Passenger Balance
+                    db.ref('cards/' + cid).update({ balance: newBal });
 
-                    // Update Fraud Prevention values
+                    // Update Shift Totals in Firebase (Persistent Storage)
+                    db.ref('bus_settings/shift_totals').transaction((currentData) => {
+                        if (currentData === null) {
+                            return { totalTickets: qtyToIssue, totalCash: total };
+                        } else {
+                            return {
+                                totalTickets: (currentData.totalTickets || 0) + qtyToIssue,
+                                totalCash: (currentData.totalCash || 0) + total
+                            };
+                        }
+                    });
+
                     lastScannedId = cid;
                     lastScanTime = currentTime;
 
-                    // Receipt Generation
                     db.ref('bus_settings/info').once('value', infoSnap => {
                         const info = infoSnap.val();
                         document.getElementById('rDate').innerText = info.travelDate;
                         document.getElementById('rBus').innerText = info.busNumber;
                         document.getElementById('rName').innerText = user.name;
                         document.getElementById('rRoute').innerText = document.getElementById('from').value + " to " + document.getElementById('to').value;
-                        document.getElementById('rQty').innerText = document.getElementById('qty').value;
+                        document.getElementById('rQty').innerText = qtyToIssue;
                         document.getElementById('rPaid').innerText = total;
                         document.getElementById('rBal').innerText = newBal;
                         document.getElementById('ticket-receipt').style.display = "block";
-                        document.getElementById('ticket-receipt').scrollIntoView();
                     });
                 } else { alert("Insufficient Balance!"); }
             } else { alert("Card Invalid!"); }
         });
+    }
+
+    // Function to erase data manually when shift ends
+    function resetShift() {
+        if(confirm("Are you sure you want to erase today's shift totals?")) {
+            db.ref('bus_settings/shift_totals').set({
+                totalTickets: 0,
+                totalCash: 0
+            });
+        }
     }
 </script>
 </body>
