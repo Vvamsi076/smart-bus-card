@@ -1,93 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conductor Terminal - Smart Bus</title>
+    <title>Conductor - Smart Bus</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
-
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #e8f5e9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
-        
-        @media print {
-            .container, button, #reader, .drop-zone, #stop-cam { display: none !important; }
-            #ticket-receipt { display: block !important; border: none !important; width: 100%; }
-        }
-
-        .input-group { margin-bottom: 12px; }
-        label { font-size: 12px; font-weight: bold; color: #555; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; margin-top: 5px; }
-        
-        .issue-btn { width: 100%; padding: 15px; background-color: #2e7d32; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        
-        #ticket-receipt { display: none; background: #fffbe6; border: 2px solid #fadb14; padding: 20px; border-radius: 10px; margin-top: 20px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-        .total-box { background: #2e7d32; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-top: 10px; }
-        
-        /* Camera Styling */
-        #reader { width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 10px; border: 1px solid #ccc; }
+        body { font-family: sans-serif; background: #e8f5e9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; background: #2e7d32; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #ticket-receipt { display: none; background: #fffbe6; border: 2px dashed #000; padding: 15px; margin-top: 20px; width: 100%; }
+        @media print { .container, #reader { display: none !important; } #ticket-receipt { display: block !important; } }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>📟 Conductor Terminal</h2>
-    
     <div id="reader"></div>
+    <input type="text" id="cardId" readonly placeholder="Scan Card QR">
+    <input type="text" id="from" placeholder="From" oninput="checkFare()">
+    <input type="text" id="to" placeholder="To" oninput="checkFare()">
+    <input type="number" id="qty" value="1" min="1" oninput="checkFare()">
     
-    <div class="drop-zone" onclick="document.getElementById('qr-input-file').click()" style="border: 2px dashed #2e7d32; padding: 15px; text-align: center; cursor: pointer; border-radius: 10px; margin-bottom: 10px;">
-        Tap to Upload QR Image (Instead of Cam)
+    <div style="background:#f1f1f1; padding:10px; margin:10px 0; text-align:center; font-weight:bold;">
+        Total: ₹<span id="total">0</span>
     </div>
-    <input type="file" id="qr-input-file" accept="image/*" style="display:none">
-
-    <div class="input-group">
-        <label>Card ID</label>
-        <input type="text" id="cardId" readonly placeholder="Camera Result Here">
-    </div>
-
-    <div style="display:flex; gap:10px">
-        <div class="input-group" style="flex:1">
-            <label>From</label>
-            <input type="text" id="fromLoc" placeholder="Origin" oninput="calculateTotal()">
-        </div>
-        <div class="input-group" style="flex:1">
-            <label>To</label>
-            <input type="text" id="toLoc" placeholder="Destination" oninput="calculateTotal()">
-        </div>
-    </div>
-
-    <div class="input-group">
-        <label>How Many Tickets?</label>
-        <input type="number" id="ticketCount" value="1" min="1" oninput="calculateTotal()">
-    </div>
-
-    <div class="total-box">
-        Total Fare: ₹<span id="displayTotal">0</span>
-    </div>
-
-    <button class="issue-btn" style="margin-top:15px" onclick="processTicket()">DEDUCT & ISSUE</button>
+    <button class="btn" onclick="issueTicket()">DEDUCT & PRINT</button>
 </div>
 
 <div id="ticket-receipt">
-    <h3 style="text-align:center; border-bottom: 2px dashed #000; padding-bottom: 10px;">SMART BUS RECEIPT</h3>
-    <div class="row"><span>Passenger:</span> <b id="tName"></b></div>
-    <div class="row"><span>Route:</span> <span id="tRoute"></span></div>
-    <div class="row"><span>Tickets:</span> <b id="tQty"></b></div>
-    <div class="row"><span>Total Paid:</span> <b id="tTotal"></b></div>
-    <div class="row" style="color: green; border-top: 1px solid #ccc; padding-top: 5px;">
-        <span>Remaining Bal:</span> <b id="tBalance"></b>
-    </div>
-    <div class="row" style="font-size: 11px; margin-top: 10px;">
-        <span>Time:</span> <span id="tTime"></span>
-    </div>
-    <button class="print-hide" onclick="window.print()" style="width:100%; padding:10px; margin-top:15px; background:#000; color:#fff; border-radius:5px;">Print Receipt</button>
+    <h3 style="text-align:center;">BUS TICKET</h3>
+    <p><b>Date:</b> <span id="rDate"></span></p>
+    <p><b>Bus No:</b> <span id="rBus"></span></p>
+    <hr>
+    <p><b>Passenger:</b> <span id="rName"></span></p>
+    <p><b>Route:</b> <span id="rRoute"></span></p>
+    <p><b>Tickets:</b> <span id="rQty"></span></p>
+    <p><b>Total Paid:</b> ₹<span id="rPaid"></span></p>
+    <p style="color:green;"><b>Balance Left:</b> ₹<span id="rBal"></span></p>
+    <button onclick="window.print()" style="width:100%; margin-top:10px;">Click to Print</button>
 </div>
 
 <script>
-    // Firebase Config
     const firebaseConfig = {
         apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
         authDomain: "smartbuscard.firebaseapp.com",
@@ -97,82 +53,58 @@
         messagingSenderId: "740841885323",
         appId: "1:740841885323:web:87c2ec39e01ffb533f8e8e"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 1. Calculate Total based on Route & Quantity
-    function calculateTotal() {
-        const from = document.getElementById('fromLoc').value.trim().toLowerCase();
-        const to = document.getElementById('toLoc').value.trim().toLowerCase();
-        const qty = parseInt(document.getElementById('ticketCount').value) || 1;
-        
-        let unitFare = 0;
-        if (from && to) {
-            unitFare = (from.length + to.length) > 10 ? 25 : 15;
-            if (from === "india" && to === "rajastan") unitFare = 15;
-        }
-        
-        document.getElementById('displayTotal').innerText = unitFare * qty;
+    // 1. Check Fare from Admin Settings
+    function checkFare() {
+        const f = document.getElementById('from').value.toLowerCase().trim();
+        const t = document.getElementById('to').value.toLowerCase().trim();
+        const q = document.getElementById('qty').value;
+        const key = f + "_" + t;
+
+        db.ref('bus_settings/routes/' + key).once('value', snap => {
+            if(snap.exists()){
+                document.getElementById('total').innerText = snap.val().price * q;
+            } else {
+                document.getElementById('total').innerText = "0";
+            }
+        });
     }
 
-    // 2. Full Camera QR Scanner Integration
-    function onScanSuccess(decodedText) {
-        // Auto-fill the Card ID when QR is detected
-        document.getElementById('cardId').value = decodedText;
-        // Visual feedback
-        document.getElementById('cardId').style.background = "#e8f5e9";
-    }
+    // 2. Camera Scanner
+    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    scanner.render((text) => { document.getElementById('cardId').value = text; });
 
-    function onScanFailure(error) {
-        // We ignore failures to avoid console spam during live scanning
-    }
-
-    // Initializing the Scanner
-    let html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader", 
-        { fps: 15, qrbox: {width: 250, height: 250} }, 
-        /* verbose= */ false
-    );
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-
-    // 3. File Upload Scan (Fallback)
-    document.getElementById('qr-input-file').addEventListener('change', e => {
-        if (e.target.files.length == 0) return;
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.scanFile(e.target.files[0], true)
-            .then(text => { document.getElementById('cardId').value = text; })
-            .catch(err => alert("QR Not Found in image"));
-    });
-
-    // 4. Final Transaction
-    function processTicket() {
+    // 3. Process Ticket
+    function issueTicket() {
         const cid = document.getElementById('cardId').value;
-        const totalFare = parseFloat(document.getElementById('displayTotal').innerText);
-        const qty = document.getElementById('ticketCount').value;
+        const total = parseFloat(document.getElementById('total').innerText);
+        if(!cid || total <= 0) { alert("Check Card/Route!"); return; }
 
-        if (!cid || totalFare <= 0) { alert("Please scan card and enter route!"); return; }
-
-        db.ref('cards/' + cid).once('value').then(snapshot => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                if (data.balance >= totalFare) {
-                    const newBal = data.balance - totalFare;
-                    db.ref('cards/' + cid).update({ balance: newBal }).then(() => {
+        db.ref('cards/' + cid).once('value', snapshot => {
+            if(snapshot.exists()){
+                const user = snapshot.val();
+                if(user.balance >= total){
+                    const newBal = user.balance - total;
+                    db.ref('cards/' + cid).update({ balance: newBal });
+                    
+                    // Fetch Bus Info for Receipt
+                    db.ref('bus_settings/info').once('value', infoSnap => {
+                        const info = infoSnap.val();
+                        document.getElementById('rDate').innerText = info.travelDate;
+                        document.getElementById('rBus').innerText = info.busNumber;
+                        document.getElementById('rName').innerText = user.name;
+                        document.getElementById('rRoute').innerText = document.getElementById('from').value + " to " + document.getElementById('to').value;
+                        document.getElementById('rQty').innerText = document.getElementById('qty').value;
+                        document.getElementById('rPaid').innerText = total;
+                        document.getElementById('rBal').innerText = newBal;
                         document.getElementById('ticket-receipt').style.display = "block";
-                        document.getElementById('tName').innerText = data.name;
-                        document.getElementById('tRoute').innerText = document.getElementById('fromLoc').value + " to " + document.getElementById('toLoc').value;
-                        document.getElementById('tQty').innerText = qty;
-                        document.getElementById('tTotal').innerText = "₹" + totalFare;
-                        document.getElementById('tBalance').innerText = "₹" + newBal;
-                        document.getElementById('tTime').innerText = new Date().toLocaleString();
-                        document.getElementById('ticket-receipt').scrollIntoView();
                     });
-                } else { alert("Insufficient Balance! Available: ₹" + data.balance); }
-            } else { alert("Invalid Card!"); }
+                } else { alert("Insufficient Balance!"); }
+            } else { alert("Card Invalid!"); }
         });
     }
 </script>
-
 </body>
 </html>
