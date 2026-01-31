@@ -1,17 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Conductor - Smart Bus</title>
+    <title>Conductor - Smart Bus Pro</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: sans-serif; background: #e8f5e9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: 'Segoe UI', sans-serif; background: #e8f5e9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         .btn { width: 100%; padding: 15px; background: #2e7d32; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        /* Shift Summary Styling */
+        #shift-summary { margin-top: 20px; background: #263238; color: white; padding: 15px; border-radius: 10px; width: 100%; max-width: 400px; }
+        .summary-item { display: flex; justify-content: space-between; margin: 5px 0; border-bottom: 1px solid #455a64; padding-bottom: 5px; }
+        
         #ticket-receipt { display: none; background: #fffbe6; border: 2px dashed #000; padding: 15px; margin-top: 20px; width: 100%; }
-        @media print { .container, #reader { display: none !important; } #ticket-receipt { display: block !important; } }
+        .warning { color: #d32f2f; font-weight: bold; background: #ffcdd2; padding: 5px; border-radius: 4px; text-align: center; margin: 10px 0; display: none; }
+        @media print { .container, #reader, #shift-summary, .btn { display: none !important; } #ticket-receipt { display: block !important; } }
     </style>
 </head>
 <body>
@@ -19,15 +25,24 @@
 <div class="container">
     <h2>📟 Conductor Terminal</h2>
     <div id="reader"></div>
+    
+    <div id="low-balance-warning" class="warning">⚠️ PASSENGER LOW BALANCE</div>
+
     <input type="text" id="cardId" readonly placeholder="Scan Card QR">
-    <input type="text" id="from" placeholder="From" oninput="checkFare()">
-    <input type="text" id="to" placeholder="To" oninput="checkFare()">
+    <input type="text" id="from" placeholder="From (Place)" oninput="checkFare()">
+    <input type="text" id="to" placeholder="To (Place)" oninput="checkFare()">
     <input type="number" id="qty" value="1" min="1" oninput="checkFare()">
     
     <div style="background:#f1f1f1; padding:10px; margin:10px 0; text-align:center; font-weight:bold;">
         Total: ₹<span id="total">0</span>
     </div>
     <button class="btn" onclick="issueTicket()">DEDUCT & PRINT</button>
+</div>
+
+<div id="shift-summary">
+    <h3 style="margin-top:0; color:#81c784;">📊 Shift Summary</h3>
+    <div class="summary-item"><span>Tickets Issued:</span> <span id="sQty">0</span></div>
+    <div class="summary-item"><span>Total Cash:</span> <span>₹<span id="sCash">0</span></span></div>
 </div>
 
 <div id="ticket-receipt">
@@ -40,10 +55,11 @@
     <p><b>Tickets:</b> <span id="rQty"></span></p>
     <p><b>Total Paid:</b> ₹<span id="rPaid"></span></p>
     <p style="color:green;"><b>Balance Left:</b> ₹<span id="rBal"></span></p>
-    <button onclick="window.print()" style="width:100%; margin-top:10px;">Click to Print</button>
+    <button onclick="window.print()" style="width:100%; margin-top:10px; background:black; color:white; padding:10px; border-radius:5px;">Print Receipt</button>
 </div>
 
 <script>
+    // Firebase Config
     const firebaseConfig = {
         apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
         authDomain: "smartbuscard.firebaseapp.com",
@@ -56,7 +72,11 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 1. Check Fare from Admin Settings
+    let totalCollection = 0;
+    let totalTickets = 0;
+    let lastScannedId = "";
+    let lastScanTime = 0;
+
     function checkFare() {
         const f = document.getElementById('from').value.toLowerCase().trim();
         const t = document.getElementById('to').value.toLowerCase().trim();
@@ -72,14 +92,34 @@
         });
     }
 
-    // 2. Camera Scanner
     const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-    scanner.render((text) => { document.getElementById('cardId').value = text; });
+    scanner.render((text) => { 
+        document.getElementById('cardId').value = text;
+        checkLowBalance(text);
+    });
 
-    // 3. Process Ticket
+    // Feature: Low Balance Warning
+    function checkLowBalance(cid) {
+        db.ref('cards/' + cid).once('value', snap => {
+            if(snap.exists() && snap.val().balance < 30) {
+                document.getElementById('low-balance-warning').style.display = "block";
+            } else {
+                document.getElementById('low-balance-warning').style.display = "none";
+            }
+        });
+    }
+
     function issueTicket() {
         const cid = document.getElementById('cardId').value;
         const total = parseFloat(document.getElementById('total').innerText);
+        const currentTime = Date.now();
+
+        // Feature: Anti-Double Scan (Fraud Prevention)
+        if(cid === lastScannedId && (currentTime - lastScanTime) < 60000) {
+            alert("This card was scanned less than a minute ago!");
+            return;
+        }
+
         if(!cid || total <= 0) { alert("Check Card/Route!"); return; }
 
         db.ref('cards/' + cid).once('value', snapshot => {
@@ -89,7 +129,17 @@
                     const newBal = user.balance - total;
                     db.ref('cards/' + cid).update({ balance: newBal });
                     
-                    // Fetch Bus Info for Receipt
+                    // Feature: Update Shift Summary
+                    totalCollection += total;
+                    totalTickets += parseInt(document.getElementById('qty').value);
+                    document.getElementById('sQty').innerText = totalTickets;
+                    document.getElementById('sCash').innerText = totalCollection;
+
+                    // Update Fraud Prevention values
+                    lastScannedId = cid;
+                    lastScanTime = currentTime;
+
+                    // Receipt Generation
                     db.ref('bus_settings/info').once('value', infoSnap => {
                         const info = infoSnap.val();
                         document.getElementById('rDate').innerText = info.travelDate;
@@ -100,6 +150,7 @@
                         document.getElementById('rPaid').innerText = total;
                         document.getElementById('rBal').innerText = newBal;
                         document.getElementById('ticket-receipt').style.display = "block";
+                        document.getElementById('ticket-receipt').scrollIntoView();
                     });
                 } else { alert("Insufficient Balance!"); }
             } else { alert("Card Invalid!"); }
