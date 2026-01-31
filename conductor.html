@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Step 3: Conductor Smart Scanner</title>
+  <style>
+    body{font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#2c3e50; display:flex; justify-content:center; padding:20px;}
+    .device{background:#ecf0f1; width:400px; padding:25px; border-radius:20px; box-shadow:0 15px 35px rgba(0,0,0,0.3); border:8px solid #bdc3c7;}
+    h2{text-align:center; color:#2c3e50; margin-bottom:10px;}
+    .screen{background:#222; color:#0f0; padding:15px; border-radius:10px; font-family:monospace; margin-bottom:20px; min-height:80px; border:3px solid #7f8c8d;}
+    label{font-weight:bold; color:#34495e; display:block; margin-top:10px;}
+    select, input{width:100%; padding:10px; margin-top:5px; border-radius:5px; border:1px solid #ccc; box-sizing: border-box;}
+    button{width:100%; padding:15px; background:#e67e22; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:20px; font-size:16px;}
+    button:hover{background:#d35400;}
+  </style>
+</head>
+<body>
+
+<div class="device">
+  <h2>📟 BUS SCANNER</h2>
+  
+  <div id="statusScreen" class="screen">WAITING FOR CARD...</div>
+
+  <label>1. Scan Card ID</label>
+  <input type="text" id="cardId" placeholder="Enter Card No (e.g. BUS546328)">
+
+  <label>2. Select Route (From → To)</label>
+  <select id="routeSelect" onchange="updateFare()">
+    <option value="0" data-fare="0">-- Select Destination --</option>
+    <option value="Route1" data-fare="15">Station A → Station B (₹15)</option>
+    <option value="Route2" data-fare="25">Station A → City Center (₹25)</option>
+    <option value="Route3" data-fare="40">Station A → Airport (₹40)</option>
+  </select>
+
+  <h3 style="text-align:right; color:#c0392b;">Fare: ₹<span id="fareDisplay">0</span></h3>
+
+  <button onclick="processTrip()">GENERATE TICKET</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+<script>
+  // USE YOUR CONFIG FROM ADMIN.HTML
+  const firebaseConfig = {
+    apiKey: "AIzaSyDKt8VhTVIE4tJ6R-nWQE_1j7EQdyPipm8",
+    authDomain: "smartbuscard.firebaseapp.com",
+    databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
+    projectId: "smartbuscard",
+    storageBucket: "smartbuscard.appspot.com"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function updateFare() {
+    const select = document.getElementById("routeSelect");
+    const fare = select.options[select.selectedIndex].getAttribute("data-fare");
+    document.getElementById("fareDisplay").innerText = fare;
+  }
+
+  function processTrip() {
+    const cardId = document.getElementById('cardId').value.trim();
+    const select = document.getElementById("routeSelect");
+    const fare = parseInt(select.options[select.selectedIndex].getAttribute("data-fare"));
+    const routeName = select.options[select.selectedIndex].text;
+    const screen = document.getElementById('statusScreen');
+
+    if(!cardId || fare === 0) {
+      alert("Please scan card and select a valid route!");
+      return;
+    }
+
+    screen.innerText = "SCANNING...";
+
+    // 1. Fetch Passenger Details
+    db.ref('cards/' + cardId).once('value').then((snapshot) => {
+      const passenger = snapshot.val();
+
+      if(!passenger) {
+        screen.innerText = "ERROR: INVALID CARD";
+        return;
+      }
+
+      // 2. Check Balance
+      if(passenger.balance < fare) {
+        screen.innerHTML = "<span style='color:#e74c3c'>INSUFFICIENT BALANCE!</span>";
+        return;
+      }
+
+      const newBalance = passenger.balance - fare;
+
+      // 3. Deduct Fare and Save Trip Record
+      const tripData = {
+        route: routeName,
+        fare: fare,
+        timestamp: new Date().toLocaleString()
+      };
+
+      // Update balance
+      db.ref('cards/' + cardId).update({ balance: newBalance });
+
+      // Save to trip history
+      db.ref('trips/').push({
+        cardId: cardId,
+        passenger: passenger.name,
+        ...tripData
+      }).then(() => {
+        // 4. Success Output (Ticket Generation)
+        screen.innerHTML = `
+          SUCCESS: TICKET ISSUED<br>
+          --------------------<br>
+          PASSENGER: ${passenger.name}<br>
+          ROUTE: ${routeName}<br>
+          NEW BAL: ₹${newBalance}<br>
+          --------------------<br>
+          SMS SENT ✅
+        `;
+        alert("Trip Recorded! SMS Confirmation Sent to Passenger.");
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
