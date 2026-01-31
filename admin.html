@@ -1,90 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Smart Bus Card – Admin (LIVE CLOUD)</title>
-  <style>
-    body{font-family:Arial;background:#f4f6f8;display:flex;justify-content:center;padding:20px;}
-    .box{width:420px;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);}    
-    h2{text-align:center;color:#333;}
-    input{width:95%;padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:6px;}
-    button{width:100%;padding:12px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;}
-    button:hover{background:#0056b3;}
-    .card{background:#e8f5e9;padding:15px;margin-top:20px;border-radius:6px;border-left:5px solid #2e7d32;}
-  </style>
-</head>
-<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-<div class="box">
-  <h2>🚌 Create New Smart Card</h2>
-
-  <form id="cardForm">
-    <input type="text" id="name" placeholder="Passenger Name" required>
-    <input type="text" id="phone" placeholder="Phone Number" required>
-    <input type="number" id="balance" placeholder="Initial Balance (₹)" value="100" required>
-    <button type="submit">Create Card & Save to Cloud</button>
-  </form>
-
-  <div id="output"></div>
-</div>
-
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+<div id="qrcode-container" style="margin-top:20px; display:flex; justify-content:center;"></div>
 
 <script>
-  // 2. PASTE YOUR UNIQUE DATA FROM FIREBASE CONSOLE HERE
-  const firebaseConfig = {
-    apiKey: "PASTE_YOUR_API_KEY",
-    authDomain: "smartbuscard.firebaseapp.com",
-    databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
-    projectId: "smartbuscard",
-    storageBucket: "smartbuscard.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
-  };
+  // ... (Keep your existing Firebase Config here) ...
 
-  // 3. Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  // 4. Handle Form Submission
-  document.getElementById('cardForm').addEventListener('submit', function(e){
-    e.preventDefault();
-
+  function createCard() {
     const name = document.getElementById('name').value;
-    const phone = document.getElementById('phone').value;
-    const balance = parseInt(document.getElementById('balance').value);
+    const cardId = "BUS" + Math.floor(100000 + Math.random() * 900000);
+    const initialBalance = 100;
 
-    // Generate a unique card number
-    const cardNo = 'BUS' + Math.floor(100000 + Math.random() * 900000);
-
-    // 5. THE REAL STEP: Sending data to the Cloud Database
-    db.ref('cards/' + cardNo).set({
+    db.ref('cards/' + cardId).set({
       name: name,
-      phone: phone,
-      balance: balance,
-      status: "Active",
-      createdAt: new Date().toISOString()
-    })
-    .then(() => {
-      // Show success message only after data is saved in Firebase
-      document.getElementById('output').innerHTML = `
-        <div class='card'>
-          <h3>✅ Card Saved to Database!</h3>
-          <p><b>Name:</b> ${name}</p>
-          <p><b>Card No:</b> ${cardNo}</p>
-          <p><b>Current Balance:</b> ₹${balance}</p>
-          <hr>
-          <small>Open your Firebase Console to see this data live.</small>
-        </div>`;
+      balance: initialBalance
+    }).then(() => {
+      // Clear previous QR code
+      document.getElementById("qrcode-container").innerHTML = "";
       
-      document.getElementById('cardForm').reset();
-    })
-    .catch((error) => {
-      alert("Error: " + error.message);
-    });
-  });
-</script>
+      // 1. Show Text Success
+      document.getElementById('result').innerHTML = `
+        <div style="color:green; font-weight:bold;">✅ Card Saved to Database!</div>
+        Name: ${name}<br>
+        Card No: <strong>${cardId}</strong><br>
+        Current Balance: ₹${initialBalance}
+      `;
 
-</body>
-</html>
+      // 2. Generate QR Code containing ONLY the Card ID
+      new QRCode(document.getElementById("qrcode-container"), {
+        text: cardId,
+        width: 128,
+        height: 128,
+        colorDark : "#000000",
+        colorLight : "#ffffff"
+      });
+    });
+  }
+</script>
