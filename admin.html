@@ -1,38 +1,83 @@
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Create Smart Card</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-<div id="qrcode-container" style="margin-top:20px; display:flex; justify-content:center;"></div>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f4f7f6; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        input { width: 80%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #qrcode-container { margin-top: 20px; display: flex; justify-content: center; }
+        #result { margin-top: 15px; font-size: 14px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🚌 Create Smart Card</h2>
+    <input type="text" id="name" placeholder="Enter Passenger Name">
+    <button onclick="createCard()">Create Card & Save to Cloud</button>
+
+    <div id="result"></div>
+    <div id="qrcode-container"></div>
+</div>
 
 <script>
-  // ... (Keep your existing Firebase Config here) ...
+    // 1. YOUR FIREBASE CONFIG (REPLACE THIS WITH YOUR KEYS)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT.firebaseapp.com",
+        databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT.appspot.com",
+        messagingSenderId: "YOUR_ID",
+        appId: "YOUR_APP_ID"
+    };
 
-  function createCard() {
-    const name = document.getElementById('name').value;
-    const cardId = "BUS" + Math.floor(100000 + Math.random() * 900000);
-    const initialBalance = 100;
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    db.ref('cards/' + cardId).set({
-      name: name,
-      balance: initialBalance
-    }).then(() => {
-      // Clear previous QR code
-      document.getElementById("qrcode-container").innerHTML = "";
-      
-      // 1. Show Text Success
-      document.getElementById('result').innerHTML = `
-        <div style="color:green; font-weight:bold;">✅ Card Saved to Database!</div>
-        Name: ${name}<br>
-        Card No: <strong>${cardId}</strong><br>
-        Current Balance: ₹${initialBalance}
-      `;
+    function createCard() {
+        const name = document.getElementById('name').value;
+        if (!name) { alert("Please enter a name"); return; }
 
-      // 2. Generate QR Code containing ONLY the Card ID
-      new QRCode(document.getElementById("qrcode-container"), {
-        text: cardId,
-        width: 128,
-        height: 128,
-        colorDark : "#000000",
-        colorLight : "#ffffff"
-      });
-    });
-  }
+        // Generate Random Card ID
+        const cardId = "BUS" + Math.floor(100000 + Math.random() * 900000);
+        const initialBalance = 100;
+
+        // Save to Firebase
+        db.ref('cards/' + cardId).set({
+            name: name,
+            balance: initialBalance
+        }).then(() => {
+            // Show Success Message
+            document.getElementById('result').innerHTML = `
+                <div style="color:green; font-weight:bold;">✅ Card Saved to Database!</div>
+                <strong>Name:</strong> ${name}<br>
+                <strong>Card No:</strong> ${cardId}<br>
+                <strong>Balance:</strong> ₹${initialBalance}
+            `;
+
+            // Clear old QR code and generate new one
+            document.getElementById("qrcode-container").innerHTML = "";
+            new QRCode(document.getElementById("qrcode-container"), {
+                text: cardId,
+                width: 150,
+                height: 150
+            });
+
+            document.getElementById('name').value = ""; // Reset input
+        }).catch((error) => {
+            document.getElementById('result').innerHTML = "Error: " + error.message;
+        });
+    }
 </script>
+
+</body>
+</html>
