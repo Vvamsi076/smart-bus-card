@@ -3,33 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Bus - Admin Panel</title>
+    <title>Passenger Registration - Smart Bus</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
-        .admin-box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; }
-        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        #result { margin-top: 20px; padding: 15px; border-radius: 8px; background: #e8f0fe; color: #1967d2; display: none; }
-        #qrcode-container { margin-top: 20px; display: flex; justify-content: center; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .form-container, .card-display { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h2 { color: #1a73e8; text-align: center; margin-top: 0; }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 14px; color: #555; }
+        input { width: 100%; padding: 10px; margin: 5px 0 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #1557b0; }
+        
+        /* Digital Card Style */
+        .card-display { display: none; text-align: center; border: 2px solid #1a73e8; }
+        .card-header { font-size: 20px; font-weight: bold; color: #1a73e8; margin-bottom: 15px; }
+        .detail-row { display: flex; justify-content: space-between; margin: 8px 0; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        #qrcode-container { margin: 20px auto; display: flex; justify-content: center; }
+        .print-btn { background-color: #34a853; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-<div class="admin-box">
-    <h2>🚌 Create Smart Card</h2>
-    <input type="text" id="passengerName" placeholder="Enter Passenger Name">
-    <button onclick="createCard()">Generate Card & QR</button>
-    <div id="result"></div>
+<div class="form-container" id="regForm">
+    <h2>🚌 New Passenger</h2>
+    <label>Full Name *</label>
+    <input type="text" id="pName" placeholder="e.g. Vamsi" required>
+    
+    <label>Phone Number *</label>
+    <input type="tel" id="pPhone" placeholder="e.g. 9876543210" required>
+    
+    <label>Email (Optional)</label>
+    <input type="email" id="pEmail" placeholder="e.g. name@mail.com">
+    
+    <label>Address (Optional)</label>
+    <input type="text" id="pAddress" placeholder="Enter City/Area">
+    
+    <label>Initial Balance (₹)</label>
+    <input type="number" id="pBalance" value="100">
+    
+    <button onclick="registerPassenger()">Register & Generate Card</button>
+</div>
+
+<div class="card-display" id="successCard">
+    <div class="card-header">Smart Bus Digital Card</div>
     <div id="qrcode-container"></div>
+    
+    <div class="detail-row"><span>Name:</span> <span id="resName"></span></div>
+    <div class="detail-row"><span>Card No:</span> <b id="resCard"></b></div>
+    <div class="detail-row"><span>Balance:</span> <b id="resBalance"></b></div>
+    
+    <button class="print-btn" onclick="window.print()">Print Card</button>
+    <button style="background:#666; margin-top:10px;" onclick="location.reload()">Register Another</button>
 </div>
 
 <script>
-    // These values are copied directly from your image_e654a0.jpg
+    // Firebase Config using your specific details
     const firebaseConfig = {
         apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
         authDomain: "smartbuscard.firebaseapp.com",
@@ -43,29 +75,49 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    function createCard() {
-        const name = document.getElementById('passengerName').value;
-        if (!name) { alert("Enter a name!"); return; }
+    function registerPassenger() {
+        // Collect Data
+        const name = document.getElementById('pName').value;
+        const phone = document.getElementById('pPhone').value;
+        const email = document.getElementById('pEmail').value || "N/A";
+        const address = document.getElementById('pAddress').value || "N/A";
+        const balance = parseFloat(document.getElementById('pBalance').value) || 100;
 
-        const cardId = "BUS" + Math.floor(100000 + Math.random() * 900000);
+        if (!name || !phone) {
+            alert("Please fill in Name and Phone Number");
+            return;
+        }
 
+        // Generate Unique Card ID
+        const cardId = "SBC" + Math.floor(100000 + Math.random() * 900000);
+
+        // Save to Firebase
         db.ref('cards/' + cardId).set({
             name: name,
-            balance: 100
+            phone: phone,
+            email: email,
+            address: address,
+            balance: balance,
+            regDate: new Date().toLocaleString()
         }).then(() => {
-            const resultDiv = document.getElementById('result');
-            resultDiv.style.display = "block";
-            resultDiv.innerHTML = `✅ Card Saved!<br>ID: <b>${cardId}</b><br>Name: ${name}`;
+            // Hide Form, Show Card
+            document.getElementById('regForm').style.display = "none";
+            document.getElementById('successCard').style.display = "block";
 
-            // Generate QR
-            document.getElementById("qrcode-container").innerHTML = "";
+            // Fill Card Details
+            document.getElementById('resName').innerText = name;
+            document.getElementById('resCard').innerText = cardId;
+            document.getElementById('resBalance').innerText = "₹" + balance;
+
+            // Generate QR Code
             new QRCode(document.getElementById("qrcode-container"), {
                 text: cardId,
-                width: 150,
-                height: 150
+                width: 160,
+                height: 160
             });
-        }).catch(err => alert("Error: " + err.message));
+        }).catch(err => alert("Error saving to cloud: " + err.message));
     }
 </script>
+
 </body>
 </html>
