@@ -1,124 +1,161 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Step 3: Conductor Smart Scanner</title>
-  <style>
-    body{font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#2c3e50; display:flex; justify-content:center; padding:20px;}
-    .device{background:#ecf0f1; width:400px; padding:25px; border-radius:20px; box-shadow:0 15px 35px rgba(0,0,0,0.3); border:8px solid #bdc3c7;}
-    h2{text-align:center; color:#2c3e50; margin-bottom:10px;}
-    .screen{background:#222; color:#0f0; padding:15px; border-radius:10px; font-family:monospace; margin-bottom:20px; min-height:80px; border:3px solid #7f8c8d;}
-    label{font-weight:bold; color:#34495e; display:block; margin-top:10px;}
-    select, input{width:100%; padding:10px; margin-top:5px; border-radius:5px; border:1px solid #ccc; box-sizing: border-box;}
-    button{width:100%; padding:15px; background:#e67e22; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:20px; font-size:16px;}
-    button:hover{background:#d35400;}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conductor Terminal - Smart Bus</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #e8f5e9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        h2 { color: #2e7d32; text-align: center; }
+        
+        /* Hidden UI for Printing */
+        @media print {
+            body { background: white; padding: 0; }
+            .container, .drop-zone, .input-group, .issue-btn, #reader, h2 { display: none !important; }
+            #ticket-receipt { display: block !important; border: none !important; box-shadow: none !important; width: 100%; margin: 0; }
+            .print-hide { display: none !important; }
+        }
+
+        .drop-zone { border: 2px dashed #2e7d32; padding: 20px; text-align: center; color: #2e7d32; cursor: pointer; margin-bottom: 15px; border-radius: 10px; }
+        .input-group { margin-bottom: 10px; }
+        label { font-size: 12px; font-weight: bold; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; margin-top: 5px; }
+        
+        .issue-btn { width: 100%; padding: 15px; background-color: #2e7d32; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; cursor: pointer; margin-top: 15px; }
+        
+        #ticket-receipt { display: none; background: #fffbe6; border: 2px solid #fadb14; padding: 20px; border-radius: 10px; margin-top: 20px; }
+        .receipt-header { border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; font-weight: bold; text-align: center; font-size: 18px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 15px; }
+        .fare-badge { background: #2e7d32; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold; display: inline-block; margin-top: 5px; }
+    </style>
 </head>
 <body>
 
-<div class="device">
-  <h2>📟 BUS SCANNER</h2>
-  
-  <div id="statusScreen" class="screen">WAITING FOR CARD...</div>
+<div class="container">
+    <h2>📟 Conductor Terminal</h2>
+    
+    <div id="reader"></div>
+    <div class="drop-zone" id="drop-area">Drag & Drop QR Image Here or Click to Upload</div>
+    <input type="file" id="qr-input-file" accept="image/*" style="display:none">
 
-  <label>1. Scan Card ID</label>
-  <input type="text" id="cardId" placeholder="Enter Card No (e.g. BUS546328)">
+    <div class="input-group">
+        <label>Card Number</label>
+        <input type="text" id="cardId" placeholder="Waiting for Scan...">
+    </div>
 
-  <label>2. Select Route (From → To)</label>
-  <select id="routeSelect" onchange="updateFare()">
-    <option value="0" data-fare="0">-- Select Destination --</option>
-    <option value="Route1" data-fare="15">Station A → Station B (₹15)</option>
-    <option value="Route2" data-fare="25">Station A → City Center (₹25)</option>
-    <option value="Route3" data-fare="40">Station A → Airport (₹40)</option>
-  </select>
+    <div style="display:flex; gap:10px">
+        <div class="input-group" style="flex:1">
+            <label>From</label>
+            <input type="text" id="fromLoc" placeholder="Origin" oninput="updateFare()">
+        </div>
+        <div class="input-group" style="flex:1">
+            <label>To</label>
+            <input type="text" id="toLoc" placeholder="Destination" oninput="updateFare()">
+        </div>
+    </div>
 
-  <h3 style="text-align:right; color:#c0392b;">Fare: ₹<span id="fareDisplay">0</span></h3>
+    <div class="input-group">
+        <label>Calculated Fare</label><br>
+        <div class="fare-badge">₹<span id="displayFare">0</span></div>
+    </div>
 
-  <button onclick="processTrip()">GENERATE TICKET</button>
+    <button class="issue-btn" onclick="processTicket()">DEDUCT & ISSUE TICKET</button>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+<div id="ticket-receipt">
+    <div class="receipt-header">SMART BUS TICKET</div>
+    <div class="row"><span>Passenger:</span> <b id="tName"></b></div>
+    <div class="row"><span>Bus No:</span> <b>TS-09-5566</b></div>
+    <div class="row"><span>Route:</span> <span id="tRoute"></span></div>
+    <div class="row"><span>Card ID:</span> <span id="tCard"></span></div>
+    <div class="row"><span>Time:</span> <span id="tTime"></span></div>
+    <div class="row" style="border-top: 1px solid #000; padding-top: 10px;">
+        <span>Fare Paid:</span> <b id="tFare"></b>
+    </div>
+    <div class="row" style="color: green;">
+        <span>New Balance:</span> <b id="tBalance"></b>
+    </div>
+    <p style="font-size: 10px; text-align: center; margin-top: 15px;">Have a safe journey!</p>
+    <button class="print-hide" onclick="window.print()" style="width:100%; padding:10px; margin-top:10px; background:#000; color:#fff; border-radius:5px;">Print Physical Receipt</button>
+</div>
 
 <script>
-  // USE YOUR CONFIG FROM ADMIN.HTML
-  const firebaseConfig = {
-    apiKey: "AIzaSyDKt8VhTVIE4tJ6R-nWQE_1j7EQdyPipm8",
-    authDomain: "smartbuscard.firebaseapp.com",
-    databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
-    projectId: "smartbuscard",
-    storageBucket: "smartbuscard.appspot.com"
-  };
+    // Use your specific Firebase Config
+    const firebaseConfig = {
+        apiKey: "AIzaSyDkt8VhTVIE4tj6R-nWQE_1j7EQdyPIpm8",
+        authDomain: "smartbuscard.firebaseapp.com",
+        databaseURL: "https://smartbuscard-default-rtdb.firebaseio.com",
+        projectId: "smartbuscard",
+        storageBucket: "smartbuscard.firebasestorage.app",
+        messagingSenderId: "740841885323",
+        appId: "1:740841885323:web:87c2ec39e01ffb533f8e8e"
+    };
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-  function updateFare() {
-    const select = document.getElementById("routeSelect");
-    const fare = select.options[select.selectedIndex].getAttribute("data-fare");
-    document.getElementById("fareDisplay").innerText = fare;
-  }
+    // Auto-Fare Logic: Simplistic calculation based on text length or keywords
+    function updateFare() {
+        const from = document.getElementById('fromLoc').value.trim().toLowerCase();
+        const to = document.getElementById('toLoc').value.trim().toLowerCase();
+        let price = 0;
 
-  function processTrip() {
-    const cardId = document.getElementById('cardId').value.trim();
-    const select = document.getElementById("routeSelect");
-    const fare = parseInt(select.options[select.selectedIndex].getAttribute("data-fare"));
-    const routeName = select.options[select.selectedIndex].text;
-    const screen = document.getElementById('statusScreen');
-
-    if(!cardId || fare === 0) {
-      alert("Please scan card and select a valid route!");
-      return;
+        if (from && to) {
+            // Example logic: if travel is between different states or long words, charge more
+            price = (from.length + to.length) > 10 ? 25 : 15;
+            if (from === "india" && to === "rajastan") price = 15; // Your specific example
+        }
+        document.getElementById('displayFare').innerText = price;
     }
 
-    screen.innerText = "SCANNING...";
+    // QR Logic
+    const html5QrCode = new Html5Qrcode("reader");
+    const dropArea = document.getElementById('drop-area');
+    const fileInput = document.getElementById('qr-input-file');
 
-    // 1. Fetch Passenger Details
-    db.ref('cards/' + cardId).once('value').then((snapshot) => {
-      const passenger = snapshot.val();
-
-      if(!passenger) {
-        screen.innerText = "ERROR: INVALID CARD";
-        return;
-      }
-
-      // 2. Check Balance
-      if(passenger.balance < fare) {
-        screen.innerHTML = "<span style='color:#e74c3c'>INSUFFICIENT BALANCE!</span>";
-        return;
-      }
-
-      const newBalance = passenger.balance - fare;
-
-      // 3. Deduct Fare and Save Trip Record
-      const tripData = {
-        route: routeName,
-        fare: fare,
-        timestamp: new Date().toLocaleString()
-      };
-
-      // Update balance
-      db.ref('cards/' + cardId).update({ balance: newBalance });
-
-      // Save to trip history
-      db.ref('trips/').push({
-        cardId: cardId,
-        passenger: passenger.name,
-        ...tripData
-      }).then(() => {
-        // 4. Success Output (Ticket Generation)
-        screen.innerHTML = `
-          SUCCESS: TICKET ISSUED<br>
-          --------------------<br>
-          PASSENGER: ${passenger.name}<br>
-          ROUTE: ${routeName}<br>
-          NEW BAL: ₹${newBalance}<br>
-          --------------------<br>
-          SMS SENT ✅
-        `;
-        alert("Trip Recorded! SMS Confirmation Sent to Passenger.");
-      });
+    dropArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+        if (e.target.files.length == 0) return;
+        html5QrCode.scanFile(e.target.files[0], true)
+            .then(text => { document.getElementById('cardId').value = text; })
+            .catch(err => alert("QR Not Detected"));
     });
-  }
+
+    function processTicket() {
+        const cid = document.getElementById('cardId').value;
+        const fare = parseFloat(document.getElementById('displayFare').innerText);
+        const from = document.getElementById('fromLoc').value;
+        const to = document.getElementById('toLoc').value;
+
+        if (!cid || fare <= 0) { alert("Invalid Card or Route!"); return; }
+
+        db.ref('cards/' + cid).once('value').then(snapshot => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                if (data.balance >= fare) {
+                    const newBal = data.balance - fare;
+                    db.ref('cards/' + cid).update({ balance: newBal }).then(() => {
+                        // Success - Fill and Show Receipt
+                        document.getElementById('ticket-receipt').style.display = "block";
+                        document.getElementById('tName').innerText = data.name;
+                        document.getElementById('tRoute').innerText = from + " ➔ " + to;
+                        document.getElementById('tCard').innerText = cid;
+                        document.getElementById('tFare').innerText = "₹" + fare;
+                        document.getElementById('tBalance').innerText = "₹" + newBal;
+                        document.getElementById('tTime').innerText = new Date().toLocaleTimeString();
+                        
+                        // Scroll to ticket
+                        document.getElementById('ticket-receipt').scrollIntoView();
+                    });
+                } else { alert("Insufficient Balance! Current: ₹" + data.balance); }
+            } else { alert("Card not found in database!"); }
+        });
+    }
 </script>
 
 </body>
